@@ -1,0 +1,9 @@
+Pandas
+https://pandas.pydata.org/pandas-docs/version/0.18.1/merging.html#merge-join-and-concatenate
+https://pandas.pydata.org/pandas-docs/version/0.18.1/reshaping.html
+
+Database basics
+https://en.wikipedia.org/wiki/Database_normalization
+https://en.wikipedia.org/wiki/Star_schema
+https://en.wikipedia.org/wiki/Isolation_(database_systems)
+https://en.wikipedia.org/wiki/Join_(SQL)
