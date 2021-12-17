@@ -1,0 +1,15 @@
+Week 5 Reading Material
+
+1. Time Series
+
+https://pandas.pydata.org/pandas-docs/stable/timeseries.html
+https://pandas.pydata.org/pandas-docs/stable/api.html#id10
+http://pandas-docs.github.io/pandas-docs-travis/timeseries.html#dateoffset-objects
+http://pandas-docs.github.io/pandas-docs-travis/timeseries.html#anchored-offsets
+
+2. Box Plot
+
+https://matplotlib.org/api/pyplot_api.html#matplotlib.pyplot.boxplot
+
+3. Textbook, Chapter 1
+
