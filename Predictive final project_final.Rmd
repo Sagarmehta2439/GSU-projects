@@ -1,0 +1,1310 @@
+---
+title: "Predictive final project"
+author: "SAGAR MEHTA"
+date: "4/4/2022"
+output: html_document
+---
+Read the dataset
+```{r}
+data(EuStockMarkets) # load the inbuilt dataset 
+df <- EuStockMarkets
+head(df) # view the first five rows
+str(df) # check for datatypes
+
+```
+
+
+
+
+```{r}
+# Import the required libraries
+library(vars)
+library(tseries)
+library(FitAR)
+library(forecast)
+library(neuralnet)
+library(MASS)
+library(grid)
+library(ggplot2)
+library(reshape2)
+```
+Data understanding
+```{r}
+# summary 
+summary(df)
+# check for missing values
+sum(is.na(df))
+# frequency statistics
+frequency(df)
+# check for the structure
+
+```
+
+
+
+Visualizing the data
+```{r}
+# convert to time series
+zoo_markets <- as.zoo(df)
+# plot the time series
+autoplot(zoo_markets,facet = NULL)
+# As we can see from the plot each four stock index are on an increasing trend over the years
+```
+
+Decomposing Time series data
+
+```{r}
+#Decomposition Approach3- Default for this function is additive
+DAX=(head(EuStockMarkets,1830)[,1])
+test = tail(EuStockMarkets,30)[,1]
+components.ts = decompose(DAX)
+plot(components.ts)
+
+# There is trend and seasonality
+
+```
+
+```{r}
+# Additive decompose for DAX indice
+decompose(DAX,type = 'additive')
+# Multiplicative Decompose for DAX indice
+decompose(DAX,type = 'multiplicative')
+```
+
+
+```{r}
+# Decomposition approach 2
+# Multiplicative Decompose for DAX indice
+stl(DAX,s.window = 'periodic')
+
+```
+# Do for all other components
+
+Data Stationarity test
+
+```{r}
+# Dickey-Fuller Test
+apply(df,2,adf.test)
+# high p-values indicate not stationary
+```
+```{r}
+# Differencing
+x = DAX -components.ts$seasonal
+DAX_stationarity <- diff(x,differences = 1)
+plot(DAX_stationarity)
+```
+
+
+Arima model
+```{r}
+# check for acf and pacf
+acf(DAX_stationarity,lag.max = 40) # 
+pacf(DAX_stationarity,lag.max = 40)
+
+
+```
+
+
+```{r}
+#auto.arima(DAX,trace = TRUE) # helps in fitting the best model
+
+```
+
+Fit the model
+```{r}
+arimamodel <- arima(DAX,order = c(5,2,0))
+
+```
+
+
+
+```{r}
+plot(arimamodel$residuals) # check for residual
+
+```
+
+
+
+# perform ljung box test 
+```{r}
+Box.test(arimamodel$residuals,type = "Ljung-Box")
+```
+
+
+
+
+```{r}
+predicted_values <- forecast(arimamodel,h = 10,level = c(99.5))
+plot(predicted_values)
+
+```
+
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+data = as.data.frame(test)
+data$arima = arima
+colnames(data) = c("test","predicted")
+data$x = 1:30
+
+data.melted <- melt(data, id="x")
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+```{r}
+predicted_values
+
+```
+
+```{r}
+arimamodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, arima)))
+print(paste0("MAPE: ", mape(test, arima)))
+
+```
+
+Holt-Winters is a model of time series behavior. Forecasting always requires a model, and Holt-Winters is a way to model three aspects of the time series: a typical value (average), a slope (trend) over time, and a cyclical repeating pattern (seasonality). Holt-Winters uses exponential smoothing to encode lots of values from the past and use them to predict “typical” values for the present and future.
+
+
+```{r}
+holtwinter <- HoltWinters(DAX,beta = NULL,gamma = NULL)
+plot(forecast(holtwinter))
+```
+
+```{r}
+pred_holt_winter <- as.data.frame(forecast(holtwinter))
+head(pred_holt_winter)
+
+```
+
+```{r}
+#MAPE metric to see the accuracy of time series model
+holtwinter$SSE
+
+```
+
+```{r}
+#Next 30 predictions considering model1
+predicted_holtwinter = forecast(holtwinter,h=30)
+plot(predicted_holtwinter)
+
+
+
+```
+
+Holt winters Train Forecast Plot
+
+```{r}
+#Next 30 predictions considering model1
+predicted_holtwinter_train = forecast(holtwinter,h=30)
+plot(predicted_holtwinter_train)
+```
+
+
+```{r}
+predicted_holtwinter = forecast(holtwinter,h=30)
+df_op = as.data.frame(predicted_holtwinter)
+hw = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = hw
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+
+```
+
+
+```{r}
+holtwinter %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+
+```
+
+
+
+```{r}
+predicted_values = forecast(predicted_holtwinter,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, hw)))
+print(paste0("MAPE: ", mape(test, hw)))
+
+```
+
+Neural Network
+
+```{r}
+neuralnetworkmodel <- nnetar(EuStockMarkets[,1],p = 20,repeats = 20,size=10,lambda = 0)
+predictedvalue <- forecast(neuralnetworkmodel,30)
+```
+
+
+
+```{r}
+plot(predictedvalue)
+
+```
+
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = nn
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+
+```{r}
+neuralnetworkmodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+plot(neuralnetworkmodel$fitted,neuralnetworkmodel$residuals)
+
+```
+
+
+
+
+
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, nn)))
+print(paste0("MAPE: ", mape(test, nn)))
+
+```
+
+```{r}
+# Let us do the stationary test once on the Dataset - Note that we have already made the data stationary
+apply(diff(df), 2, adf.test)
+#as the P Value is less then 0.05 we can use this series
+
+
+```
+
+
+```{r}
+plot.ts(diff(df))
+
+
+```
+
+
+```{r}
+#Lag order identification
+library(vars)
+VARselect(diff(df), type='none', lag.max =10)
+#Based on the output chosing the AIC
+
+```
+
+
+```{r}
+#Creating a VAR model with vars
+var.a <- vars::VAR(diff(df),
+                  lag.max=10,
+                   ic = "AIC",
+                   type = "none")
+summary(var.a)
+
+```
+
+
+
+```{r}
+#Residual Diagnostics
+serial.test(var.a)
+#P Value is very high indicating the correlation
+
+```
+
+
+
+```{r}
+#Granger test for casuality
+causality(var.a, cause = c("DAX"))
+
+```
+
+
+```{r}
+
+var_pred = predict(var.a, n.ahead = 30)$fcst[1]$DAX[,1]+ 5473.72
+
+
+data = as.data.frame(test)
+data$arima = var_pred
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+```{r}
+#Forecasting VAR Model
+fcast = predict(var.a, n.ahead = 30)
+plot(fcast)
+```
+
+
+```{r}
+#As above forecast does not imply clear  results, lets do some data manipulation
+# Forecasting the DAX index
+
+DAX = fcast$fcst[1] # type list
+
+# Extracting the forecast column
+
+x = DAX$DAX[,1]
+
+```
+
+```{r}
+#Getting the data in same scale(as we differenced to make it stationary)
+# 5473.72 is the last value, can do tail of the variable and get the data
+# Inverting the differencing
+
+x = cumsum(x) + 5473.72
+plot.ts(x)
+
+```
+
+
+
+```{r}
+# Adding data and forecast to one time series
+
+DAXinv =ts(c(EuStockMarkets[,1], x),
+
+                 start = c(1991,130), frequency = 260)
+
+
+
+plot(DAXinv)
+
+```
+
+
+
+
+```{r}
+#Let us plot lesser records to get clear plot
+plot.ts(DAXinv[1786:1890])
+
+```
+
+
+
+
+```{r}
+## Creating an advanced plot with visual separation
+
+# Converting to object zoo
+
+x = zoo(DAXinv[1786:1890])
+
+# Advanced xyplot from lattice
+
+xyplot(x, grid=TRUE, panel = function(x, y, ...){
+
+  panel.xyplot(x, y, col="red", ...)
+
+  grid.clip(x = unit(76, "native"), just=c("right"))
+
+  panel.xyplot(x, y, col="green", ...) })
+
+```
+
+
+
+```{r}
+predicted_values = predict(var.a, n.ahead = 30)$fcst[1]$DAX[,1]+ 5473.72
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, predicted_values)))
+print(paste0("MAPE: ", mape(test, predicted_values)))
+
+```
+
+
+
+```{r}
+#Decomposition Approach3- Default for this finction is additive
+SMI=(head(EuStockMarkets,1830)[,2])
+test = tail(EuStockMarkets,30)[,2]
+components.ts = decompose(SMI)
+plot(components.ts)
+
+```
+
+
+
+
+```{r}
+#Approach 2
+x = SMI- components.ts$seasonal
+SMI_stationary <- diff(x, differences=1)
+plot(SMI_stationary)
+
+```
+
+
+
+
+```{r}
+#To find the Correlation using Autocorrelation Function and Partial Autocorrelation Function of our series
+acf(SMI_stationary,lag.max = 40)
+pacf(SMI_stationary,lag.max = 40)
+
+```
+
+
+
+```{r}
+fitARIMA = arima(SMI, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+res=fitARIMA$residuals
+plot(res)
+
+```
+
+
+
+```{r}
+Box.test(res,type="Ljung-Box")
+
+
+```
+
+
+```{r}
+#auto.arima(SMI, trace=TRUE)
+
+```
+
+```{r}
+arimamodel <- arima(SMI,order=c(5,2,0))
+
+```
+
+```{r}
+#Performing Ljung Box  test
+Box.test(arimamodel$residuals,type="Ljung-Box")
+
+```
+
+
+```{r}
+#Visualizing the residuals
+plot(arimamodel$residuals)
+
+```
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+plot(predicted_values)
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+data = as.data.frame(test)
+data$arima = arima
+colnames(data) = c("test","predicted")
+data$x = 1:30
+
+data.melted <- melt(data, id="x")
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+arimamodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, arima)))
+print(paste0("MAPE: ", mape(test, arima)))
+print(paste0("MAE: ", mae(test, arima)))
+```
+
+Holt-winter for SMI
+```{r}
+
+holtwintermodel1<-HoltWinters(SMI,beta=NULL,gamma=NULL)
+plot(forecast(holtwintermodel1))
+
+```
+
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = hw
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+holtwintermodel1 %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, hw)))
+print(paste0("MAPE: ", mape(test, hw)))
+
+```
+
+Neural Network for SMI
+```{r}
+neuralnetworkmodel <- nnetar(EuStockMarkets[,2],p = 20,repeats =20,size=10,lambda = 0)
+predictedvalue <- forecast(neuralnetworkmodel,30)
+plot(predictedvalue)
+```
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = nn
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+neuralnetworkmodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+plot(neuralnetworkmodel$fitted,neuralnetworkmodel$residuals)
+
+```
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, nn)))
+print(paste0("MAPE: ", mape(test, nn)))
+
+```
+
+VAR
+
+```{r}
+#As above forecast does not imply clear  results, lets do some data manipulation
+# Forecasting the SMI
+
+SMI = fcast$fcst[2] # type list
+
+# Extracting the forecast column
+
+x = SMI$SMI[,1]
+
+```
+
+
+```{r}
+x = cumsum(x) + 7676.3
+plot.ts(x)
+```
+
+
+```{r}
+# Adding data and forecast to one time series
+
+SMIinv =ts(c(EuStockMarkets[,2], x),
+
+                 start = c(1991,130), frequency = 260)
+
+
+
+plot(SMIinv)
+
+```
+
+
+```{r}
+#Let us plot lesser records to get clear plot
+plot.ts(SMIinv[1786:1890])
+
+
+
+```
+
+
+```{r}
+## Creating an advanced plot with visual separation
+
+# Converting to object zoo
+
+x = zoo(SMIinv[1786:1890])
+
+# Advanced xyplot from lattice
+
+xyplot(x, grid=TRUE, panel = function(x, y, ...){
+
+  panel.xyplot(x, y, col="red", ...)
+
+  grid.clip(x = unit(76, "native"), just=c("right"))
+
+  panel.xyplot(x, y, col="green", ...) })
+
+```
+```{r}
+
+var_pred = predict(var.a, n.ahead = 30)$fcst[2]$SMI[,2]+ 4300
+
+
+data = as.data.frame(test)
+data$arima = var_pred
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+```{r}
+predicted_values = predict(var.a, n.ahead = 30)$fcst[2]$SMI[,1]+ 7676.3
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, predicted_values)))
+print(paste0("MAPE: ", mape(test, predicted_values)))
+
+```
+Mape:0.84
+Arima:0.17
+Holt Winter: 0.03
+Var: 0.32
+Neural Network: 0.05
+
+
+
+
+```{r}
+head(df)
+
+```
+CAC
+
+```{r}
+#Decomposition Approach3- Default for this function is additive
+CAC=(head(EuStockMarkets,1830)[,3])
+test = tail(EuStockMarkets,30)[,3]
+components.ts = decompose(CAC)
+plot(components.ts)
+
+```
+
+```{r}
+#Approach 2
+x = CAC- components.ts$seasonal
+CAC_stationary <- diff(x, differences=1)
+plot(CAC_stationary)
+
+```
+
+
+```{r}
+#To find the Correlation using Autocorrelation Function and Partial Autocorrelation Function of our series
+acf(CAC_stationary,lag.max = 40)
+pacf(CAC_stationary,lag.max = 40)
+
+```
+
+
+```{r}
+fitARIMA = arima(CAC, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+res=fitARIMA$residuals
+plot(res)
+```
+
+
+```{r}
+Box.test(res,type="Ljung-Box")
+
+```
+
+
+```{r}
+#auto.arima(CAC, trace=TRUE)
+
+```
+
+
+```{r}
+arimamodel <- arima(CAC,order=c(5,2,0))
+#Visualizing the residuals
+plot(arimamodel$residuals)
+
+```
+
+
+```{r}
+#Performing Ljung Box  test
+Box.test(arimamodel$residuals,type="Ljung-Box")
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+plot(predicted_values)
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+data = as.data.frame(test)
+data$arima = arima
+colnames(data) = c("test","predicted")
+data$x = 1:30
+
+data.melted <- melt(data, id="x")
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+arimamodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, arima)))
+print(paste0("MAPE: ", mape(test, arima)))
+
+```
+
+```{r}
+#simple exponential smoothing for default ts assuming no trend
+
+holtwintermodel1<-HoltWinters(CAC,beta=NULL,gamma=NULL)
+plot(forecast(holtwintermodel1))
+```
+
+
+```{r}
+pred <- as.data.frame(forecast(holtwintermodel1))
+#MAPE metric to see the accuracy of time series model
+holtwintermodel1$SSE
+
+```
+
+
+```{r}
+#Next 30 predictions considering model1
+predicted_values1 = forecast(holtwintermodel1,h=30)
+plot(predicted_values1)
+
+```
+
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = hw
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+holtwintermodel1 %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, hw)))
+print(paste0("MAPE: ", mape(test, hw)))
+
+```
+
+Neural Network
+```{r}
+neuralnetworkmodel <- nnetar(EuStockMarkets[,3],p = 1, repeats = 20,size=10,lambda = 0)
+predictedvalue <- forecast(neuralnetworkmodel,30)
+plot(predictedvalue)
+
+```
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = nn
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+neuralnetworkmodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+plot(neuralnetworkmodel$fitted,neuralnetworkmodel$residuals)
+
+```
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, hw)))
+print(paste0("MAPE: ", mape(test, hw)))
+
+```
+VAR
+```{r}
+var_pred = predict(var.a, n.ahead = 30)$fcst[3]$CAC[,1]+ 4200
+
+
+data = as.data.frame(test)
+data$arima = var_pred
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+```{r}
+#As above forecast does not imply clear  results, lets do some data manipulation
+# Forecasting the CAC index
+
+CAC = fcast$fcst[3] # type list
+
+# Extracting the forecast column
+
+x = CAC$CAC[,1]
+
+```
+
+
+```{r}
+x = cumsum(x) +4200
+plot.ts(x)
+
+```
+
+```{r}
+# Adding data and forecast to one time series
+
+CACinv =ts(c(EuStockMarkets[,3], x),
+
+                 start = c(1991,130), frequency = 260)
+
+
+
+plot(CACinv)
+
+```
+
+```{r}
+#Let us plot lesser records to get clear plot
+plot.ts(CACinv[1786:1890])
+
+```
+
+
+```{r}
+## Creating an advanced plot with visual separation
+
+# Converting to object zoo
+
+x = zoo(CACinv[1786:1890])
+
+# Advanced xyplot from lattice
+
+xyplot(x, grid=TRUE, panel = function(x, y, ...){
+
+  panel.xyplot(x, y, col="red", ...)
+
+  grid.clip(x = unit(76, "native"), just=c("right"))
+
+  panel.xyplot(x, y, col="green", ...) })
+
+```
+
+
+```{r}
+predicted_values = predict(var.a, n.ahead = 30)$fcst[3]$CAC[,1]+ 4300
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, predicted_values)))
+print(paste0("MAPE: ", mape(test, predicted_values)))
+
+```
+
+FTSE
+```{r}
+#Decomposition Approach3- Default for this finction is additive
+FTSE=(head(EuStockMarkets,1830)[,4])
+test = tail(EuStockMarkets,30)[,4]
+components.ts = decompose(FTSE)
+plot(components.ts)
+
+```
+
+
+
+```{r}
+#Approach 2
+x = FTSE- components.ts$seasonal
+FTSE_stationary <- diff(x, differences=1)
+plot(FTSE_stationary)
+
+```
+
+
+```{r}
+#To find the Correlation using Autocorrelation Function and Partial Autocorrelation Function of our series
+acf(FTSE_stationary,lag.max = 40)
+pacf(FTSE_stationary,lag.max = 40)
+
+```
+
+```{r}
+fitARIMA = arima(FTSE, order=c(1,1,1),seasonal = list(order = c(1,0,0), period = 12),method="ML")
+res=fitARIMA$residuals
+plot(res)
+
+```
+
+
+```{r}
+Box.test(res,type="Ljung-Box")
+
+```
+
+
+```{r}
+#auto.arima(FTSE, trace=TRUE)
+
+```
+
+
+```{r}
+arimamodel <- arima(FTSE,order=c(0,1,1))
+#Visualizing the residuals
+plot(arimamodel$residuals)
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+plot(predicted_values)
+
+```
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+data = as.data.frame(test)
+data$arima = arima
+colnames(data) = c("test","predicted")
+data$x = 1:30
+
+data.melted <- melt(data, id="x")
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+```
+
+
+```{r}
+arimamodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+predicted_values = forecast(arimamodel,h=30, level=c(99.5))
+df_arima = as.data.frame(predicted_values)
+arima = df_arima$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, arima)))
+print(paste0("MAPE: ", mape(test, arima)))
+
+```
+
+
+```{r}
+
+
+holtwintermodel1<-HoltWinters(FTSE,beta=NULL,gamma=NULL)
+plot(forecast(holtwintermodel1))
+
+```
+
+
+```{r}
+#MAPE metric to see the accuracy of time series model
+holtwintermodel1$SSE
+
+```
+
+
+
+```{r}
+#Next 30 predictions considering model1
+predicted_values1 = forecast(holtwintermodel1,h=30)
+plot(predicted_values1)
+
+```
+
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = hw
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+```{r}
+holtwintermodel1 %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+```{r}
+predicted_values = forecast(holtwintermodel1,h=30)
+df_op = as.data.frame(predicted_values)
+hw = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, hw)))
+print(paste0("MAPE: ", mape(test, hw)))
+
+```
+
+```{r}
+neuralnetworkmodel <- nnetar(EuStockMarkets[,4],p = 20, repeats = 1,size=10,lambda = 0)
+predictedvalue <- forecast(neuralnetworkmodel,30)
+plot(predictedvalue)
+
+```
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+
+data = as.data.frame(test)
+data$arima = nn
+
+colnames(data) = c("test","predicted")
+
+data$x = 1:30
+data.melted <- melt(data, id="x")
+require(ggplot2)
+qplot(x=x, y=value, color=variable, data=data.melted, geom="line")
+
+```
+
+
+```{r}
+neuralnetworkmodel %>%
+  forecast(h=30) %>%
+  autoplot() + autolayer(test)
+
+```
+
+
+```{r}
+plot(neuralnetworkmodel$fitted,neuralnetworkmodel$residuals)
+
+```
+
+
+```{r}
+predicted_values = forecast(neuralnetworkmodel,h=30)
+df_op = as.data.frame(predicted_values)
+nn = df_op$`Point Forecast`
+
+library(Metrics)
+print(paste0("RMSE: ", rmse(test, nn)))
+print(paste0("MAPE: ", mape(test, nn)))
+
+```
+
+
+
+
+
